@@ -16,13 +16,31 @@
 
 package com.github.platform.team.plugin;
 
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.maven.wagon.ResourceDoesNotExistException;
+import org.apache.maven.wagon.TransferFailedException;
+import org.apache.maven.wagon.authentication.AuthenticationException;
+import org.apache.maven.wagon.authentication.AuthenticationInfo;
+import org.apache.maven.wagon.proxy.ProxyInfoProvider;
+import org.apache.maven.wagon.repository.Repository;
+
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.internal.Mimetypes;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.ObjectMetadata;
@@ -36,33 +54,17 @@ import com.github.platform.team.plugin.data.transfer.TransferProgressFileOutputS
 import com.github.platform.team.plugin.maven.AbstractWagon;
 import com.github.platform.team.plugin.util.IOUtils;
 import com.github.platform.team.plugin.util.S3Utils;
-import org.apache.maven.wagon.ResourceDoesNotExistException;
-import org.apache.maven.wagon.TransferFailedException;
-import org.apache.maven.wagon.authentication.AuthenticationException;
-import org.apache.maven.wagon.authentication.AuthenticationInfo;
-import org.apache.maven.wagon.proxy.ProxyInfoProvider;
-import org.apache.maven.wagon.repository.Repository;
-
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * An implementation of the Maven Wagon interface that allows you to access the Amazon S3 service. URLs that reference
- * the S3 service should be in the form of <code>s3://bucket.name</code>. As an example
- * <code>s3://static.springframework.org</code> would put files into the <code>static.springframework.org</code> bucket
- * on the S3 service.
+ * An implementation of the Maven Wagon interface that allows you to access the
+ * Amazon S3 service. URLs that reference the S3 service should be in the form
+ * of <code>s3://bucket.name</code>. As an example
+ * <code>s3://static.springframework.org</code> would put files into the
+ * <code>static.springframework.org</code> bucket on the S3 service.
  * <p>
- * This implementation uses the <code>username</code> and <code>passphrase</code> portions of the server authentication
- * metadata for credentials.
+ * This implementation uses the <code>username</code> and
+ * <code>passphrase</code> portions of the server authentication metadata for
+ * credentials.
  */
 public final class AmazonS3Wagon extends AbstractWagon {
 
@@ -90,7 +92,8 @@ public final class AmazonS3Wagon extends AbstractWagon {
         this.baseDirectory = baseDirectory;
     }
 
-    private static ObjectMetadata getObjectMetadata(AmazonS3 amazonS3, String bucketName, String baseDirectory, String resourceName) {
+    private static ObjectMetadata getObjectMetadata(AmazonS3 amazonS3, String bucketName, String baseDirectory,
+            String resourceName) {
         return amazonS3.getObjectMetadata(bucketName, getKey(baseDirectory, resourceName));
     }
 
@@ -120,7 +123,8 @@ public final class AmazonS3Wagon extends AbstractWagon {
         return key;
     }
 
-    private static void mkdirs(AmazonS3 amazonS3, String bucketName, String path, int index) throws TransferFailedException {
+    private static void mkdirs(AmazonS3 amazonS3, String bucketName, String path, int index)
+            throws TransferFailedException {
         int directoryIndex = path.indexOf('/', index) + 1;
 
         if (directoryIndex != 0) {
@@ -142,35 +146,32 @@ public final class AmazonS3Wagon extends AbstractWagon {
 
         ObjectMetadata objectMetadata = new ObjectMetadata();
         objectMetadata.setContentLength(0);
+        objectMetadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
 
-        return new PutObjectRequest(bucketName, key, inputStream, objectMetadata).withCannedAcl(CannedAccessControlList.PublicRead);
+        return new PutObjectRequest(bucketName, key, inputStream, objectMetadata);
     }
 
-    private static String getBucketRegion(AWSCredentialsProvider credentialsProvider, ClientConfiguration clientConfiguration, String bucketName) {
-        return AmazonS3Client.builder()
-                .withCredentials(credentialsProvider)
-                .withClientConfiguration(clientConfiguration)
-                .enableForceGlobalBucketAccess()
-                .build()
+    private static String getBucketRegion(AWSCredentialsProvider credentialsProvider,
+            ClientConfiguration clientConfiguration, String bucketName) {
+        return AmazonS3Client.builder().withCredentials(credentialsProvider)
+                .withClientConfiguration(clientConfiguration).enableForceGlobalBucketAccess().build()
                 .getBucketLocation(bucketName);
     }
 
     @Override
     protected void connectToRepository(Repository repository, AuthenticationInfo authenticationInfo,
-                                       ProxyInfoProvider proxyInfoProvider) throws AuthenticationException {
+            ProxyInfoProvider proxyInfoProvider) throws AuthenticationException {
         if (this.amazonS3 == null) {
-            AWSMavenCredentialsProviderChain credentialsProvider =
-                    new AWSMavenCredentialsProviderChain(authenticationInfo);
+            AWSMavenCredentialsProviderChain credentialsProvider = new AWSMavenCredentialsProviderChain(
+                    authenticationInfo);
             ClientConfiguration clientConfiguration = S3Utils.getClientConfiguration(proxyInfoProvider);
 
             this.bucketName = S3Utils.getBucketName(repository);
             this.baseDirectory = S3Utils.getBaseDirectory(repository);
 
-            this.amazonS3 = AmazonS3Client.builder()
-                    .withCredentials(credentialsProvider)
+            this.amazonS3 = AmazonS3Client.builder().withCredentials(credentialsProvider)
                     .withClientConfiguration(clientConfiguration)
-                    .withRegion(getBucketRegion(credentialsProvider, clientConfiguration, this.bucketName))
-                    .build();
+                    .withRegion(getBucketRegion(credentialsProvider, clientConfiguration, this.bucketName)).build();
         }
     }
 
@@ -194,7 +195,8 @@ public final class AmazonS3Wagon extends AbstractWagon {
     @Override
     protected boolean isRemoteResourceNewer(String resourceName, long timestamp) throws ResourceDoesNotExistException {
         try {
-            Date lastModified = getObjectMetadata(this.amazonS3, this.bucketName, this.baseDirectory, resourceName).getLastModified();
+            Date lastModified = getObjectMetadata(this.amazonS3, this.bucketName, this.baseDirectory, resourceName)
+                    .getLastModified();
             return lastModified == null || lastModified.getTime() > timestamp;
         } catch (AmazonServiceException e) {
             throw new ResourceDoesNotExistException(String.format("'%s' does not exist", resourceName), e);
@@ -247,15 +249,16 @@ public final class AmazonS3Wagon extends AbstractWagon {
         } catch (FileNotFoundException e) {
             throw new TransferFailedException(String.format("Cannot write file to '%s'", destination), e);
         } catch (IOException e) {
-            throw new TransferFailedException(String.format("Cannot read from '%s' and write to '%s'", resourceName, destination), e);
+            throw new TransferFailedException(
+                    String.format("Cannot read from '%s' and write to '%s'", resourceName, destination), e);
         } finally {
             IOUtils.closeQuietly(in, out);
         }
     }
 
     @Override
-    protected void putResource(File source, String destination, TransferProgress transferProgress) throws TransferFailedException,
-            ResourceDoesNotExistException {
+    protected void putResource(File source, String destination, TransferProgress transferProgress)
+            throws TransferFailedException, ResourceDoesNotExistException {
         String key = getKey(this.baseDirectory, destination);
 
         mkdirs(amazonS3, this.bucketName, key, 0);
@@ -265,6 +268,7 @@ public final class AmazonS3Wagon extends AbstractWagon {
             ObjectMetadata objectMetadata = new ObjectMetadata();
             objectMetadata.setContentLength(source.length());
             objectMetadata.setContentType(Mimetypes.getInstance().getMimetype(source));
+            objectMetadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
 
             in = new TransferProgressFileInputStream(source, transferProgress);
 

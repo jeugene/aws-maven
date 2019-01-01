@@ -16,26 +16,16 @@
 
 package com.github.platform.team.plugin;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.ListObjectsRequest;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectResult;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.model.S3ObjectInputStream;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.github.platform.team.plugin.data.TransferProgress;
-import org.apache.maven.wagon.ResourceDoesNotExistException;
-import org.apache.maven.wagon.TransferFailedException;
-import org.apache.maven.wagon.WagonException;
-import org.apache.maven.wagon.authentication.AuthenticationInfo;
-import org.apache.maven.wagon.repository.Repository;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.mockito.ArgumentCaptor;
+import static com.github.platform.team.plugin.maven.matchers.Matchers.eq;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -45,16 +35,26 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
-import static com.github.platform.team.plugin.maven.matchers.Matchers.eq;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.apache.maven.wagon.ResourceDoesNotExistException;
+import org.apache.maven.wagon.TransferFailedException;
+import org.apache.maven.wagon.WagonException;
+import org.apache.maven.wagon.authentication.AuthenticationInfo;
+import org.apache.maven.wagon.repository.Repository;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.mockito.ArgumentCaptor;
+
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.ListObjectsRequest;
+import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.PutObjectResult;
+import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectInputStream;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.github.platform.team.plugin.data.TransferProgress;
 
 public class AmazonS3WagonTest {
 
@@ -76,8 +76,7 @@ public class AmazonS3WagonTest {
 
     private final TransferProgress transferProgress = mock(TransferProgress.class);
 
-    private final AmazonS3Wagon wagon =
-            new AmazonS3Wagon(this.amazonS3, BUCKET_NAME, BASE_DIRECTORY);
+    private final AmazonS3Wagon wagon = new AmazonS3Wagon(this.amazonS3, BUCKET_NAME, BASE_DIRECTORY);
 
     // Run only locally against own aws keys
     @Ignore
@@ -121,23 +120,23 @@ public class AmazonS3WagonTest {
 
     @Test
     public void doesRemoteResourceExistExists() {
-        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME,
-                BASE_DIRECTORY + FILE_NAME)).thenReturn(this.objectMetadata);
+        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME, BASE_DIRECTORY + FILE_NAME))
+                .thenReturn(this.objectMetadata);
         assertTrue(this.wagon.doesRemoteResourceExist(FILE_NAME));
     }
 
     @Test
     public void doesRemoteResourceExistDoesNotExist() {
-        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME,
-                BASE_DIRECTORY + FILE_NAME)).thenThrow(new AmazonServiceException(""));
+        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME, BASE_DIRECTORY + FILE_NAME))
+                .thenThrow(new AmazonServiceException(""));
         assertFalse(this.wagon.doesRemoteResourceExist(FILE_NAME));
     }
 
     @Test
     public void isRemoteResourceNewerNewer() throws ResourceDoesNotExistException {
         when(this.objectMetadata.getLastModified()).thenReturn(new Date());
-        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME,
-                BASE_DIRECTORY + FILE_NAME)).thenReturn(this.objectMetadata);
+        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME, BASE_DIRECTORY + FILE_NAME))
+                .thenReturn(this.objectMetadata);
 
         assertTrue(this.wagon.isRemoteResourceNewer(FILE_NAME, 0));
     }
@@ -145,24 +144,24 @@ public class AmazonS3WagonTest {
     @Test
     public void isRemoteResourceNewerOlder() throws ResourceDoesNotExistException {
         when(this.objectMetadata.getLastModified()).thenReturn(new Date());
-        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME,
-                BASE_DIRECTORY + FILE_NAME)).thenReturn(this.objectMetadata);
+        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME, BASE_DIRECTORY + FILE_NAME))
+                .thenReturn(this.objectMetadata);
 
         assertFalse(this.wagon.isRemoteResourceNewer(FILE_NAME, Long.MAX_VALUE));
     }
 
     @Test
     public void isRemoteResourceNewerNoLastModified() throws ResourceDoesNotExistException {
-        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME,
-                BASE_DIRECTORY + FILE_NAME)).thenReturn(this.objectMetadata);
+        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME, BASE_DIRECTORY + FILE_NAME))
+                .thenReturn(this.objectMetadata);
 
         assertTrue(this.wagon.isRemoteResourceNewer(FILE_NAME, 0));
     }
 
     @Test(expected = ResourceDoesNotExistException.class)
     public void isRemoteResourceNewerDoesNotExist() throws ResourceDoesNotExistException {
-        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME,
-                BASE_DIRECTORY + FILE_NAME)).thenThrow(new AmazonServiceException(""));
+        when(this.amazonS3.getObjectMetadata(AmazonS3WagonTest.BUCKET_NAME, BASE_DIRECTORY + FILE_NAME))
+                .thenThrow(new AmazonServiceException(""));
         this.wagon.isRemoteResourceNewer(FILE_NAME, 0);
     }
 
@@ -215,8 +214,8 @@ public class AmazonS3WagonTest {
 
     @Test
     public void getResource() throws TransferFailedException, FileNotFoundException, ResourceDoesNotExistException {
-        when(this.amazonS3.getObject(AmazonS3WagonTest.BUCKET_NAME,
-                BASE_DIRECTORY + FILE_NAME)).thenReturn(this.s3Object);
+        when(this.amazonS3.getObject(AmazonS3WagonTest.BUCKET_NAME, BASE_DIRECTORY + FILE_NAME))
+                .thenReturn(this.s3Object);
         when(this.s3Object.getObjectContent())
                 .thenReturn(new S3ObjectInputStream(new FileInputStream("src/test/resources/test.txt"), null));
 
@@ -231,8 +230,8 @@ public class AmazonS3WagonTest {
 
     @Test(expected = ResourceDoesNotExistException.class)
     public void getResourceSourceDoesNotExist() throws TransferFailedException, ResourceDoesNotExistException {
-        when(this.amazonS3.getObject(AmazonS3WagonTest.BUCKET_NAME,
-                BASE_DIRECTORY + FILE_NAME)).thenThrow(new AmazonServiceException(""));
+        when(this.amazonS3.getObject(AmazonS3WagonTest.BUCKET_NAME, BASE_DIRECTORY + FILE_NAME))
+                .thenThrow(new AmazonServiceException(""));
         File target = new File("target/robots.txt");
         this.wagon.getResource(FILE_NAME, target, this.transferProgress);
     }
@@ -250,7 +249,8 @@ public class AmazonS3WagonTest {
             assertEquals(BUCKET_NAME, putObjectRequests.get(i).getBucketName());
             assertNotNull(putObjectRequests.get(i).getInputStream());
             assertEquals(0, putObjectRequests.get(i).getMetadata().getContentLength());
-            assertEquals(CannedAccessControlList.PublicRead, putObjectRequests.get(i).getCannedAcl());
+            // remove assertEquals(CannedAccessControlList.PublicRead,
+            // putObjectRequests.get(i).getCannedAcl());
         }
 
         assertEquals("foo/", putObjectRequests.get(0).getKey());
